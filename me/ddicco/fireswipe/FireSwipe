@@ -24,6 +24,7 @@ import com.projectkorra.projectkorra.attribute.Attribute;
 import com.projectkorra.projectkorra.command.Commands;
 import com.projectkorra.projectkorra.configuration.ConfigManager;
 import com.projectkorra.projectkorra.util.DamageHandler;
+import com.projectkorra.projectkorra.util.ParticleEffect;
 
 public class FireSwipe extends FireAbility implements AddonAbility {
 	
@@ -89,7 +90,7 @@ public class FireSwipe extends FireAbility implements AddonAbility {
 		this.start();
 	}
 	
-	private void advanceSwipe() {
+	private void FireSwipe() {
 		this.affectedEntities.clear();
 		for (final Vector direction : this.elements.keySet()) {
 			Location location = this.elements.get(direction);
@@ -113,10 +114,10 @@ public class FireSwipe extends FireAbility implements AddonAbility {
 							this.elements.remove(direction);
 						}
 					} else {
-						playFirebendingParticles(location, 1, 0.2F, 0.2F, 0.2F);
+						ParticleEffect.FLAME.display(player.getLocation(), 1, 0.5F, 0.5F, 1, this.particles);
 						if (this.random.nextInt(4) == 0) {
 						}
-						this.affectPeople(location, direction);
+						this.damage(location, direction);
 					}
 				}
 			}
@@ -126,7 +127,7 @@ public class FireSwipe extends FireAbility implements AddonAbility {
 		}
 	}
 	
-	private void affectPeople(final Location location, final Vector direction) {
+	private void damage(final Location location, final Vector direction) {
 		final List<Entity> entities = GeneralMethods.getEntitiesAroundPoint(location, this.radius);
 		final Vector fDirection = direction;
 
@@ -148,7 +149,6 @@ public class FireSwipe extends FireAbility implements AddonAbility {
 						if (entity instanceof LivingEntity && !FireSwipe.this.affectedEntities.contains(entity)) {
 							if (FireSwipe.this.damage != 0) {
 								DamageHandler.damageEntity(entity, FireSwipe.this.damage, abil);
-								entity.setFireTicks(10);
 							}
 							FireSwipe.this.affectedEntities.add(entity);
 						}
@@ -225,7 +225,7 @@ public class FireSwipe extends FireAbility implements AddonAbility {
 			return;
 		}
 		
-		this.advanceSwipe();
+		this.FireSwipe();
 	}
 
 	@Override
@@ -349,7 +349,7 @@ public class FireSwipe extends FireAbility implements AddonAbility {
 	public void load() {
 		// TODO Auto-generated method stub
 		ProjectKorra.plugin.getServer().getPluginManager().registerEvents(new FireSwipeListener(), ProjectKorra.plugin);
-		ProjectKorra.log.info("Successfully enabled " + getName() + " by " + getAuthor() + " Version " + getVersion());
+		ProjectKorra.log.info("Succesfully enabled " + getName() + " by " + getAuthor() + " Version " + getVersion());
         ConfigManager.getConfig().addDefault("ExtraAbilities.ddicco.FireSwipe.Particles", 2);
         ConfigManager.getConfig().addDefault("ExtraAbilities.ddicco.FireSwipe.Arc", 35);
         ConfigManager.getConfig().addDefault("ExtraAbilities.ddicco.FireSwipe.StepSize", 4);
