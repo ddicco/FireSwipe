@@ -1,9 +1,6 @@
-package me.ddicco.FireSwipe;
+package me.ddicco.fireswipe;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Location;
@@ -12,7 +9,6 @@ import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
 import com.projectkorra.projectkorra.GeneralMethods;
@@ -20,151 +16,57 @@ import com.projectkorra.projectkorra.ProjectKorra;
 import com.projectkorra.projectkorra.ability.AddonAbility;
 import com.projectkorra.projectkorra.ability.ElementalAbility;
 import com.projectkorra.projectkorra.ability.FireAbility;
-import com.projectkorra.projectkorra.attribute.Attribute;
-import com.projectkorra.projectkorra.command.Commands;
-import com.projectkorra.projectkorra.configuration.ConfigManager;
 import com.projectkorra.projectkorra.util.DamageHandler;
 import com.projectkorra.projectkorra.util.ParticleEffect;
 
 public class FireSwipe extends FireAbility implements AddonAbility {
 	
-	private static final int MAX_AFFECTABLE_ENTITIES = 10;
-
+	private double damage;
+	private double range;
+	private double speed;
+	private float particlespeed;
+	private double radius;
+	Location startlocation;
 	private int arc;
 	private int particles;
-	private int stepSize;
-	@Attribute(Attribute.CHARGE_DURATION)
-	private long maxChargeTime;
-	@Attribute(Attribute.COOLDOWN)
 	private long cooldown;
-	@Attribute(Attribute.DAMAGE)
-	private double damage;
-	@Attribute(Attribute.SPEED)
-	private double speed;
-	@Attribute(Attribute.RANGE)
-	private double range;
-	@Attribute(Attribute.RADIUS)
-	private double radius;
-	private double maxChargeFactor;
-	private Location origin;
-	private Random random;
 	private Map<Vector, Location> elements;
-	private ArrayList<Entity> affectedEntities;
-	
+	private double stepSize;
+
 	public FireSwipe(Player player) {
 		super(player);
 		// TODO Auto-generated constructor stub
-		this.origin = player.getEyeLocation();
-		this.particles = ConfigManager.getConfig().getInt("ExtraAbilities.ddicco.FireSwipe.Particles");
-		this.arc = ConfigManager.getConfig().getInt("ExtraAbilities.ddicco.FireSwipe.Arc");
-		this.stepSize = ConfigManager.getConfig().getInt("ExtraAbilities.ddicco.FireSwipe.StepSize");
-		this.maxChargeTime = ConfigManager.getConfig().getLong("ExtraAbilities.ddicco.FireSwipe.MaxChargeTime");
-		this.cooldown = ConfigManager.getConfig().getLong("ExtraAbilities.ddicco.FireSwipe.Cooldown");
-		this.damage = ConfigManager.getConfig().getDouble("ExtraAbilities.ddicco.FireSwipe.Damage");
-		this.speed = ConfigManager.getConfig().getDouble("ExtraAbilities.ddicco.FireSwipe.Speed") * (ProjectKorra.time_step / 1000.0);
-		this.range = ConfigManager.getConfig().getDouble("ExtraAbilities.ddicco.FireSwipe.Range");
-		this.radius = ConfigManager.getConfig().getDouble("ExtraAbilities.ddicco.FireSwipe.Radius");
-		this.maxChargeFactor = ConfigManager.getConfig().getDouble("ExtraAbilities.ddicco.FireSwipe.ChargeFactor");
-		this.random = new Random();
-		this.elements = new ConcurrentHashMap<>();
-		this.affectedEntities = new ArrayList<>();
 		
-		if (this.bPlayer.isOnCooldown(this) || player.getEyeLocation().getBlock().isLiquid()) {
-			this.remove();
-			return;
-		}
-
-		if (!this.bPlayer.canBend(this)) {
-			this.remove();
+		startlocation = player.getEyeLocation();
+		particles = 3;
+		particlespeed = 0.1F;
+		arc = 15;
+		stepSize = 3;
+		cooldown = 5000;
+		damage = 3;
+		speed = 25 * (ProjectKorra.time_step / 1000.0);
+		range = 8;
+		radius = 3;
+		elements = new ConcurrentHashMap<>();
+		
+		if(bPlayer.isOnCooldown(this)) {
+			remove();
 			return;
 		}
 		
-		this.launch();
+		if(!bPlayer.canBend(this)) {
+			remove();
+			return;
+		}
 		
-		if (this.bPlayer.isAvatarState()) {
-			this.cooldown = getConfig().getLong("Abilities.Avatar.AvatarState.Air.AirSwipe.Cooldown");
-			this.damage = getConfig().getDouble("Abilities.Avatar.AvatarState.Air.AirSwipe.Damage");
-			this.range = getConfig().getDouble("Abilities.Avatar.AvatarState.Air.AirSwipe.Range");
-			this.radius = getConfig().getDouble("Abilities.Avatar.AvatarState.Air.AirSwipe.Radius");
-		}
-		this.start();
+		setFields();
+		
+		start();
 	}
 	
-	private void FireSwipe() {
-		this.affectedEntities.clear();
-		for (final Vector direction : this.elements.keySet()) {
-			Location location = this.elements.get(direction);
-			if (direction != null && location != null) {
-				location = location.clone().add(direction.clone().multiply(this.speed));
-				this.elements.put(direction, location);
-
-				if (location.distanceSquared(this.origin) > this.range * this.range || GeneralMethods.isRegionProtectedFromBuild(this, location)) {
-					this.elements.clear();
-				} else {
-					final Block block = location.getBlock();
-					if (!ElementalAbility.isTransparent(this.player, block)) {
-						this.remove();
-						return;
-					}
-
-					if (block.getType() != Material.AIR) {
-						if (block.getType().equals(Material.SNOW)) {
-							continue;
-						} else {
-							this.elements.remove(direction);
-						}
-					} else {
-						ParticleEffect.FLAME.display(player.getLocation(), 1, 0.5F, 0.5F, 1, this.particles);
-						if (this.random.nextInt(4) == 0) {
-						}
-						this.damage(location, direction);
-					}
-				}
-			}
-		}
-		if (this.elements.isEmpty()) {
-			this.remove();
-		}
-	}
-	
-	private void damage(final Location location, final Vector direction) {
-		final List<Entity> entities = GeneralMethods.getEntitiesAroundPoint(location, this.radius);
-		final Vector fDirection = direction;
-
-		for (int i = 0; i < entities.size(); i++) {
-			final Entity entity = entities.get(i);
-			final FireSwipe abil = this;
-			new BukkitRunnable() {
-				@Override
-				public void run() {
-					if (GeneralMethods.isRegionProtectedFromBuild(FireSwipe.this, entity.getLocation())) {
-						return;
-					}
-					if (entity.getEntityId() != FireSwipe.this.player.getEntityId() && entity instanceof LivingEntity) {
-						if (entity instanceof Player) {
-							if (Commands.invincible.contains(((Player) entity).getName())) {
-								return;
-							}
-						}
-						if (entity instanceof LivingEntity && !FireSwipe.this.affectedEntities.contains(entity)) {
-							if (FireSwipe.this.damage != 0) {
-								DamageHandler.damageEntity(entity, FireSwipe.this.damage, abil);
-							}
-							FireSwipe.this.affectedEntities.add(entity);
-						}
-						if (FireSwipe.this.elements.containsKey(fDirection)) {
-							FireSwipe.this.elements.remove(fDirection);
-						}
-
-					}
-				}
-			}.runTaskLater(ProjectKorra.plugin, i / MAX_AFFECTABLE_ENTITIES);
-		}
-	}
-	
-	private void launch() {
-		this.bPlayer.addCooldown("FireSwipe", this.cooldown);
-		this.origin = this.player.getEyeLocation();
+	public void setFields() {
+		bPlayer.addCooldown(this);
+		startlocation = this.player.getEyeLocation();
 		for (double i = -this.arc; i <= this.arc; i += this.stepSize) {
 			final double angle = Math.toRadians(i);
 			final Vector direction = this.player.getEyeLocation().getDirection().clone();
@@ -178,22 +80,29 @@ public class FireSwipe extends FireAbility implements AddonAbility {
 
 			direction.setX(vx);
 			direction.setZ(vz);
-
-			this.elements.put(direction, this.origin);
+			
+			this.elements.put(direction, startlocation);
 		}
 	}
 	
-	@Override
-	public long getCooldown() {
+	
+	
+	private void damageEntities(Location location2, Vector direction2) {
 		// TODO Auto-generated method stub
-		return this.cooldown;
 	}
 
 	@Override
-	public Location getLocation() {
-		return this.elements.size() != 0 ? this.elements.values().iterator().next() : null;
+	public long getCooldown() {
+		// TODO Auto-generated method stub
+		return cooldown;
 	}
 	
+	@Override
+	public Location getLocation() {
+		// TODO Auto-generated method stub
+		return player.getLocation();
+	}
+
 	@Override
 	public String getName() {
 		// TODO Auto-generated method stub
@@ -215,17 +124,55 @@ public class FireSwipe extends FireAbility implements AddonAbility {
 	@Override
 	public void progress() {
 		// TODO Auto-generated method stub
-		if (!this.bPlayer.canBendIgnoreBindsCooldowns(this)) {
-			this.remove();
-			return;
-		}
-
-		if (this.player.isDead() || !this.player.isOnline()) {
-			this.remove();
+		if(!bPlayer.canBendIgnoreBindsCooldowns(this)) {
+			remove();
 			return;
 		}
 		
-		this.FireSwipe();
+		if(!player.isOnline() || player.isDead()) {
+			remove();
+			return;
+		}
+		
+		if (this.elements.isEmpty()) {
+			remove();
+			return;
+		}
+		for (final Vector direction : this.elements.keySet()) {
+			Location location = this.elements.get(direction);
+			if (direction != null && location != null) {
+				location = location.clone().add(direction.clone().multiply(this.speed));
+				this.elements.put(direction, location);
+
+				if (location.distanceSquared(startlocation) > this.range * this.range || GeneralMethods.isRegionProtectedFromBuild(this, location)) {
+					elements.clear();
+				} else {
+					final Block block = location.getBlock();
+					if (!ElementalAbility.isTransparent(this.player, block)) {
+						remove();
+						return;
+					}
+
+					if (block.getType() != Material.AIR) {
+						if (block.getType().equals(Material.SNOW)) {
+							continue;
+						} else {
+							elements.remove(direction);
+						}
+					} else {
+						ParticleEffect.FLAME.display(location, 0.2F, 0.2F, 0.2F, particlespeed, particles);
+						damageEntities(location, direction);
+				        for ( Entity entity : GeneralMethods.getEntitiesAroundPoint(location, radius) ) {
+				            if(entity instanceof LivingEntity) {
+				            	if(entity != player) {
+				                   	DamageHandler.damageEntity(entity, damage, this);
+				            	}
+				            }
+				        }
+					}
+				}
+			}
+		}
 	}
 
 	@Override
@@ -237,138 +184,19 @@ public class FireSwipe extends FireAbility implements AddonAbility {
 	@Override
 	public String getVersion() {
 		// TODO Auto-generated method stub
-		return "1.5";
-	}
-	
-	@Override
-	public List<Location> getLocations() {
-		final ArrayList<Location> locations = new ArrayList<>();
-		for (final Location swipeLoc : this.elements.values()) {
-			locations.add(swipeLoc);
-		}
-		return locations;
-	}
-
-	public Location getOrigin() {
-		return this.origin;
-	}
-
-	public void setOrigin(final Location origin) {
-		this.origin = origin;
-	}
-
-	public int getArc() {
-		return this.arc;
-	}
-
-	public void setArc(final int arc) {
-		this.arc = arc;
-	}
-
-	public int getParticles() {
-		return this.particles;
-	}
-
-	public void setParticles(final int particles) {
-		this.particles = particles;
-	}
-
-	public static int getMaxAffectableEntities() {
-		return MAX_AFFECTABLE_ENTITIES;
-	}
-
-	public long getMaxChargeTime() {
-		return this.maxChargeTime;
-	}
-
-	public void setMaxChargeTime(final long maxChargeTime) {
-		this.maxChargeTime = maxChargeTime;
-	}
-
-	public double getDamage() {
-		return this.damage;
-	}
-
-	public void setDamage(final double damage) {
-		this.damage = damage;
-	}
-
-	public double getSpeed() {
-		return this.speed;
-	}
-
-	public void setSpeed(final double speed) {
-		this.speed = speed;
-	}
-
-	public double getRange() {
-		return this.range;
-	}
-
-	public void setRange(final double range) {
-		this.range = range;
-	}
-
-	public double getRadius() {
-		return this.radius;
-	}
-
-	public void setRadius(final double radius) {
-		this.radius = radius;
-	}
-
-	public double getMaxChargeFactor() {
-		return this.maxChargeFactor;
-	}
-
-	public void setMaxChargeFactor(final double maxChargeFactor) {
-		this.maxChargeFactor = maxChargeFactor;
-	}
-
-	public Map<Vector, Location> getElements() {
-		return this.elements;
-	}
-
-	public ArrayList<Entity> getAffectedEntities() {
-		return this.affectedEntities;
-	}
-
-	public void setCooldown(final long cooldown) {
-		this.cooldown = cooldown;
-	}
-
-	public int getStepSize() {
-		return this.stepSize;
-	}
-
-	public void setStepSize(final int stepSize) {
-		this.stepSize = stepSize;
+		return "1.0";
 	}
 
 	@Override
 	public void load() {
 		// TODO Auto-generated method stub
 		ProjectKorra.plugin.getServer().getPluginManager().registerEvents(new FireSwipeListener(), ProjectKorra.plugin);
-		ProjectKorra.log.info("Succesfully enabled " + getName() + " by " + getAuthor() + " Version " + getVersion());
-        ConfigManager.getConfig().addDefault("ExtraAbilities.ddicco.FireSwipe.Particles", 2);
-        ConfigManager.getConfig().addDefault("ExtraAbilities.ddicco.FireSwipe.Arc", 35);
-        ConfigManager.getConfig().addDefault("ExtraAbilities.ddicco.FireSwipe.StepSize", 4);
-        ConfigManager.getConfig().addDefault("ExtraAbilities.ddicco.FireSwipe.MaxChargeTime", 2500);
-        ConfigManager.getConfig().addDefault("ExtraAbilities.ddicco.FireSwipe.Cooldown", 1500);
-        ConfigManager.getConfig().addDefault("ExtraAbilities.ddicco.FireSwipe.DefaultDistance", 15);
-        ConfigManager.getConfig().addDefault("ExtraAbilities.ddicco.FireSwipe.Damage", 3);
-        ConfigManager.getConfig().addDefault("ExtraAbilities.ddicco.FireSwipe.Speed", 25);
-        ConfigManager.getConfig().addDefault("ExtraAbilities.ddicco.FireSwipe.Range", 10);
-        ConfigManager.getConfig().addDefault("ExtraAbilities.ddicco.FireSwipe.Radius", 3);
-        ConfigManager.getConfig().addDefault("ExtraAbilities.ddicco.FireSwipe.ChargeFactor", 3);
-        ConfigManager.defaultConfig.save();
+		ProjectKorra.log.info("Successfully enabled " + getName() + " by " + getAuthor() + " Version " + getVersion());
 	}
-
+	
 	@Override
 	public void stop() {
 		// TODO Auto-generated method stub
-		ProjectKorra.log.info("Successfully disabled " + getName() + " by " + getAuthor());
-		super.remove();
+		
 	}
-
 }
