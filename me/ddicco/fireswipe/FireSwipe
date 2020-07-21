@@ -66,10 +66,12 @@ public class FireSwipe extends FireAbility implements AddonAbility {
 	public void setFields() {
 		bPlayer.addCooldown(this);
 		startlocation = this.player.getEyeLocation();
+		location = startlocation;
 		direction = player.getEyeLocation().getDirection();
 		for(int i = -arc; i >= arc; i += stepSize) {
-			directions.put(i, GeneralMethods.rotateXZ(direction.clone(), i));
+			player.sendMessage("a");
 			angles.add(i);
+			directions.put(i, GeneralMethods.rotateXZ(direction.clone(), i));
 		}
 		
 		for(int angle : directions.keySet()) {
