@@ -1,54 +1,54 @@
 package me.ddicco.fireswipe;
 
+import java.util.ArrayList;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.block.Block;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 
 import com.projectkorra.projectkorra.GeneralMethods;
 import com.projectkorra.projectkorra.ProjectKorra;
 import com.projectkorra.projectkorra.ability.AddonAbility;
-import com.projectkorra.projectkorra.ability.ElementalAbility;
 import com.projectkorra.projectkorra.ability.FireAbility;
-import com.projectkorra.projectkorra.util.DamageHandler;
 import com.projectkorra.projectkorra.util.ParticleEffect;
 
 public class FireSwipe extends FireAbility implements AddonAbility {
 	
+	private Random rand = new Random();
+	private ArrayList<Integer> angles = new ArrayList<Integer>();
 	private double damage;
 	private double range;
+	private double range1;
+	private double range2;
 	private double speed;
-	private float particlespeed;
-	private double radius;
-	Location startlocation;
+	private Location startlocation;
+	private Location location;
+	private Vector direction;
+	private Map<Integer, Vector> directions = new ConcurrentHashMap<>();
+	private ArrayList<Location> locationarray = new ArrayList<Location>();
+	private Map<Integer, ArrayList<Location>> locations1 = new ConcurrentHashMap<>();
+	private Map<Integer, ArrayList<Location>> locations2 = new ConcurrentHashMap<>();
 	private int arc;
 	private int particles;
-	private long cooldown;
-	private Map<Vector, Location> elements;
 	private double stepSize;
+	private long cooldown;
 
 	public FireSwipe(Player player) {
 		super(player);
 		// TODO Auto-generated constructor stub
 		
 		startlocation = player.getEyeLocation();
-		particles = 3;
-		particlespeed = 0.1F;
-		arc = 15;
+		particles = 1;
+		arc = 16;
 		stepSize = 3;
-		cooldown = 5000;
+		cooldown = 3000;
 		damage = 3;
 		speed = 25 * (ProjectKorra.time_step / 1000.0);
 		range = 8;
-		radius = 3;
-		elements = new ConcurrentHashMap<>();
-		
+		range1 = range/2;
 		if(bPlayer.isOnCooldown(this)) {
 			remove();
 			return;
@@ -61,34 +61,28 @@ public class FireSwipe extends FireAbility implements AddonAbility {
 		
 		setFields();
 		
-		start();
 	}
 	
 	public void setFields() {
 		bPlayer.addCooldown(this);
 		startlocation = this.player.getEyeLocation();
-		for (double i = -this.arc; i <= this.arc; i += this.stepSize) {
-			final double angle = Math.toRadians(i);
-			final Vector direction = this.player.getEyeLocation().getDirection().clone();
-
-			double x, z, vx, vz;
-			x = direction.getX();
-			z = direction.getZ();
-
-			vx = x * Math.cos(angle) - z * Math.sin(angle);
-			vz = x * Math.sin(angle) + z * Math.cos(angle);
-
-			direction.setX(vx);
-			direction.setZ(vz);
-			
-			this.elements.put(direction, startlocation);
+		direction = player.getEyeLocation().getDirection();
+		for(int i = -arc; i >= arc; i += stepSize) {
+			directions.put(i, GeneralMethods.rotateXZ(direction.clone(), i));
+			angles.add(i);
 		}
-	}
-	
-	
-	
-	private void damageEntities(Location location2, Vector direction2) {
-		// TODO Auto-generated method stub
+		
+		for(int angle : directions.keySet()) {
+			Vector direction = directions.get(angle);
+			while (location.distanceSquared(startlocation) <= range1 * range1) {
+				location = location.clone().add(direction.multiply(speed));
+				locationarray.add(location);
+			}
+			locations1.put(angle, locationarray);
+			locationarray.clear();
+		}
+		
+		start();
 	}
 
 	@Override
@@ -134,45 +128,20 @@ public class FireSwipe extends FireAbility implements AddonAbility {
 			return;
 		}
 		
-		if (this.elements.isEmpty()) {
-			remove();
-			return;
+		int random = rand.nextInt(angles.size());
+		int angle = angles.get(random);
+		
+		ArrayList<Location> loc1 = locations1.get(angle);
+		for(Location location : loc1) {
+			ParticleEffect.CLOUD.display(location, 0, 0, 0, 0, particles);
 		}
-		for (final Vector direction : this.elements.keySet()) {
-			Location location = this.elements.get(direction);
-			if (direction != null && location != null) {
-				location = location.clone().add(direction.clone().multiply(this.speed));
-				this.elements.put(direction, location);
-
-				if (location.distanceSquared(startlocation) > this.range * this.range || GeneralMethods.isRegionProtectedFromBuild(this, location)) {
-					elements.clear();
-				} else {
-					final Block block = location.getBlock();
-					if (!ElementalAbility.isTransparent(this.player, block)) {
-						remove();
-						return;
-					}
-
-					if (block.getType() != Material.AIR) {
-						if (block.getType().equals(Material.SNOW)) {
-							continue;
-						} else {
-							elements.remove(direction);
-						}
-					} else {
-						ParticleEffect.FLAME.display(location, 0.2F, 0.2F, 0.2F, particlespeed, particles);
-						damageEntities(location, direction);
-				        for ( Entity entity : GeneralMethods.getEntitiesAroundPoint(location, radius) ) {
-				            if(entity instanceof LivingEntity) {
-				            	if(entity != player) {
-				                   	DamageHandler.damageEntity(entity, damage, this);
-				            	}
-				            }
-				        }
-					}
-				}
-			}
-		}
+	}
+	
+	@Override
+	public void remove() {
+		bPlayer.addCooldown(this);
+		super.remove();
+		return;
 	}
 
 	@Override
@@ -184,14 +153,15 @@ public class FireSwipe extends FireAbility implements AddonAbility {
 	@Override
 	public String getVersion() {
 		// TODO Auto-generated method stub
-		return "1.0";
+		return "0.0.1";
 	}
 
 	@Override
 	public void load() {
 		// TODO Auto-generated method stub
 		ProjectKorra.plugin.getServer().getPluginManager().registerEvents(new FireSwipeListener(), ProjectKorra.plugin);
-		ProjectKorra.log.info("Successfully enabled " + getName() + " by " + getAuthor() + " Version " + getVersion());
+		ProjectKorra.log.info("Successfully enabled" + getName() + " by " + getAuthor() + " Version " + getVersion());
+		
 	}
 	
 	@Override
